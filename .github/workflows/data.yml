@@ -1,0 +1,57 @@
+# Builds network.json / mtr.json from official open data and publishes them to the `data`
+# branch. The app downloads them from:
+#   https://raw.githubusercontent.com/mtcxxx/hk-bus-data/data/network.json
+name: Daily data
+
+on:
+  schedule:
+    - cron: '7 4 * * *'   # 12:07 Hong Kong time: full build (off-peak MTR headways)
+    - cron: '17 0 * * 1-5' # 08:17 Hong Kong time on weekdays: MTR peak headways only
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Get the previous data (if any)
+        run: |
+          if git ls-remote --exit-code --heads origin data >/dev/null 2>&1; then
+            git fetch origin data --depth 1
+            git worktree add data-out origin/data
+          else
+            mkdir -p data-out
+          fi
+
+      - name: Build
+        run: |
+          if [ "${{ github.event.schedule }}" = "17 0 * * 1-5" ]; then
+            test -f data-out/mtr.json && node pipeline/build-data.mjs --out data-out --mtr-peak-only || echo "No mtr.json yet"
+          else
+            node pipeline/build-data.mjs --out data-out
+          fi
+
+      - name: Publish to the data branch (one commit, force-pushed)
+        run: |
+          test -f data-out/network.json || { echo "Nothing to publish"; exit 0; }
+          mkdir publish
+          cp data-out/network.json data-out/meta.json publish/
+          test -f data-out/mtr.json && cp data-out/mtr.json publish/ || true
+          cd publish
+          git init -q -b data
+          git add .
+          git -c user.name="hk-bus-data-bot" -c user.email="actions@users.noreply.github.com" commit -q -m "Data $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data
