@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "generated": "2026-10-10T10:37:39.274Z",
+  "gtfsDate": "2026-09-30",
+  "hash": "e177f5e72cbfbb88",
+  "routes": 2261,
+  "stops": 4320,
+  "withLiveEta": 2235,
+  "mtrStations": 97
+}
